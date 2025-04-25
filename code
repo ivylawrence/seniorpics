@@ -1,0 +1,206 @@
+import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Shuffle, Pause, Play, Maximize2 } from 'lucide-react';
+
+export default function ShuffledSlideshow() {
+  const [mediaFiles, setMediaFiles] = useState([]);
+  const [shuffledMedia, setShuffledMedia] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [imageDuration, setImageDuration] = useState(3000); // 3 seconds
+  const videoRef = useRef(null);
+  const containerRef = useRef(null);
+
+  const handleUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const urls = files.map((file) => ({
+      url: URL.createObjectURL(file),
+      type: file.type.startsWith('video') ? 'video' : 'image',
+    }));
+    const updatedFiles = [...mediaFiles, ...urls];
+    setMediaFiles(updatedFiles);
+    shuffleAndStart(updatedFiles);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files);
+    const urls = files.map((file) => ({
+      url: URL.createObjectURL(file),
+      type: file.type.startsWith('video') ? 'video' : 'image',
+    }));
+    const updatedFiles = [...mediaFiles, ...urls];
+    setMediaFiles(updatedFiles);
+    shuffleAndStart(updatedFiles);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const shuffleAndStart = (files) => {
+    const shuffled = [...files].sort(() => Math.random() - 0.5);
+    setShuffledMedia(shuffled);
+    setCurrentIndex(0);
+    setPlaying(true);
+    setIsPaused(false);
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  const nextSlide = () => {
+    setCurrentIndex((prev) => (prev + 1) % shuffledMedia.length);
+  };
+
+  const handleDelete = (fileToDelete) => {
+    const newMedia = mediaFiles.filter((file) => file.url !== fileToDelete.url);
+    setMediaFiles(newMedia);
+
+    const newShuffled = shuffledMedia.filter((file) => file.url !== fileToDelete.url);
+    setShuffledMedia(newShuffled);
+
+    if (currentMedia?.url === fileToDelete.url) {
+      setCurrentIndex((prev) => (prev + 1) % newShuffled.length);
+    } else {
+      setCurrentIndex((prev) => Math.min(prev, newShuffled.length - 1));
+    }
+
+    if (newShuffled.length === 0) {
+      setPlaying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!playing || isPaused || shuffledMedia.length === 0) return;
+
+    const current = shuffledMedia[currentIndex];
+    let timeout;
+
+    if (current.type === 'image') {
+      timeout = setTimeout(() => {
+        nextSlide();
+      }, imageDuration);
+    } else if (current.type === 'video' && videoRef.current) {
+      videoRef.current.play();
+      const onEnded = () => nextSlide();
+      videoRef.current.addEventListener('ended', onEnded);
+      return () => videoRef.current.removeEventListener('ended', onEnded);
+    }
+
+    return () => clearTimeout(timeout);
+  }, [currentIndex, playing, isPaused, shuffledMedia, imageDuration]);
+
+  const currentMedia = shuffledMedia[currentIndex];
+
+  return (
+    <div
+      ref={containerRef}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4"
+    >
+      <h1 className="text-3xl font-bold mb-4">Shuffled Media Slideshow</h1>
+
+      <input
+        type="file"
+        multiple
+        accept="image/*,video/*"
+        onChange={handleUpload}
+        className="mb-4"
+      />
+
+      <div className="w-full max-w-4xl h-[60vh] flex items-center justify-center bg-black rounded-xl overflow-hidden">
+        {currentMedia && currentMedia.type === 'image' && (
+          <img
+            src={currentMedia.url}
+            alt="Slide"
+            className="object-contain w-full h-full"
+          />
+        )}
+        {currentMedia && currentMedia.type === 'video' && (
+          <video
+            ref={videoRef}
+            src={currentMedia.url}
+            className="w-full h-full"
+            controls={false}
+            autoPlay
+          />
+        )}
+      </div>
+
+      <div className="flex gap-4 mt-4">
+        {mediaFiles.length > 0 && (
+          <Button onClick={() => shuffleAndStart(mediaFiles)} className="flex items-center gap-2">
+            <Shuffle className="w-4 h-4" /> Shuffle Again
+          </Button>
+        )}
+        {playing && (
+          <Button onClick={() => setIsPaused(!isPaused)} className="flex items-center gap-2">
+            {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />} {isPaused ? 'Play' : 'Pause'}
+          </Button>
+        )}
+        <Button onClick={toggleFullscreen} className="flex items-center gap-2">
+          <Maximize2 className="w-4 h-4" /> Fullscreen
+        </Button>
+      </div>
+
+      <div className="mt-4 w-full max-w-xs text-center">
+        <label className="block mb-1 font-medium text-sm">
+          Image Duration: {imageDuration / 1000} sec
+        </label>
+        <input
+          type="range"
+          min="1"
+          max="10"
+          value={imageDuration / 1000}
+          onChange={(e) => setImageDuration(Number(e.target.value) * 1000)}
+          className="w-full"
+        />
+      </div>
+
+      <p className="mt-4 text-sm text-gray-400">
+        Drag and drop files anywhere on the screen to keep adding to the slideshow.
+      </p>
+
+      {mediaFiles.length > 0 && (
+        <div className="mt-6 w-full max-w-4xl">
+          <h2 className="text-lg font-semibold mb-2">Your Media Files</h2>
+          <div className="grid grid-cols-4 gap-4">
+            {mediaFiles.map((file, index) => (
+              <div
+                key={index}
+                className="relative group border border-gray-700 rounded overflow-hidden"
+              >
+                {file.type === 'image' ? (
+                  <img
+                    src={file.url}
+                    alt="Media preview"
+                    className="object-cover w-full h-32"
+                  />
+                ) : (
+                  <video src={file.url} className="w-full h-32 object-cover" muted />
+                )}
+                <button
+                  onClick={() => handleDelete(file)}
+                  className="absolute top-1 right-1 text-sm bg-red-600 text-white rounded px-2 py-1 opacity-80 hover:opacity-100"
+                >
+                  🗑️
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
